@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+"""
 This is a python function
 """
 from pymongo import MongoClient
