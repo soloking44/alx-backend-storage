@@ -1,0 +1,2 @@
+// Code to show all databases in a session.
+show dbs;
