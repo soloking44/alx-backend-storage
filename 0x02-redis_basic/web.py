@@ -2,9 +2,9 @@
 """
 This web cache and tracker function.
 """
-from functools import wraps
 import redis
 import requests
+from functools import wraps
 from typing import Callable
 
 
