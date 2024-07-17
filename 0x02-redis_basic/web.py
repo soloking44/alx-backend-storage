@@ -1,38 +1,55 @@
 #!/usr/bin/env python3
-'''this is the tools for caching and tracking function.
-'''
-import redis
+"""
+This script implements a cache and tracker function using Redis.
+"""
+
 import requests
+import redis
+import time
 from functools import wraps
-from typing import Callable
 
+# Initialize the Redis client
+redis_client = redis.Redis(host='localhost', port=6379, db=0)
 
-redis_store = redis.Redis()
-'''The redis instance.
-'''
+def cache_page(expiration=10):
+    """
+    Decorator to cache the result of get_page function and track access count.
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(url):
+            cache_key = f"cache:{url}"
+            count_key = f"count:{url}"
 
+            # Check if the URL is in the cache
+            cached_result = redis_client.get(cache_key)
+            if cached_result:
+                print("Cache hit")
+                redis_client.incr(count_key)
+                return cached_result.decode('utf-8')
+            
+            # Fetch the page and cache it
+            print("Cache miss")
+            result = func(url)
+            redis_client.setex(cache_key, expiration, result)
+            redis_client.incr(count_key)
+            return result
+        
+        return wrapper
+    return decorator
 
-def data_cacher(method: Callable) -> Callable:
-    '''The output of a get data.
-    '''
-    @wraps(method)
-    def invoker(url) -> str:
-        '''The wrapper function for caching the output.
-        '''
-        redis_store.incr(f'count:{url}')
-        result = redis_store.get(f'result:{url}')
-        if result:
-            return result.decode('utf-8')
-        result = method(url)
-        redis_store.set(f'count:{url}', 0)
-        redis_store.setex(f'result:{url}', 10, result)
-        return result
-    return invoker
-
-
-@data_cacher
+@cache_page(expiration=10)
 def get_page(url: str) -> str:
-    '''Returns the content of a URL after caching the request's response,
-    and tracking the request.
-    '''
-    return requests.get(url).text
+    """
+    Fetch the HTML content of the given URL.
+    """
+    response = requests.get(url)
+    return response.text
+
+if __name__ == "__main__":
+    test_url = "http://slowwly.robertomurray.co.uk/delay/5000/url/http://www.example.com"
+    print(get_page(test_url))  # First call, should fetch and cache
+    time.sleep(1)
+    print(get_page(test_url))  # Subsequent call within 10 seconds, should use cache
+    time.sleep(11)
+    print(get_page(test_url))  # After 11 seconds, should fetch again and cache
