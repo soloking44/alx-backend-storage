@@ -1,68 +1,75 @@
 #!/usr/bin/env python3
 """
-A module with tools for caching HTTP requests and tracking access counts.
+A module with tools for request caching and tracking.
 """
 
-from functools import wraps
 import redis
 import requests
-from typing import Callable
+from datetime import timedelta
+import logging
+from typing import Optional
 
-# Initialize Redis connection
-r = redis.Redis()
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-def count_requests(method: Callable[[str], str]) -> Callable[[str], str]:
-    """Decorator that counts the number of requests to a URL and caches the response.
-    
-    Args:
-        method (Callable[[str], str]): The method to be decorated.
-    
-    Returns:
-        Callable[[str], str]: The decorated method.
+# Redis connection configuration
+REDIS_HOST = 'localhost'
+REDIS_PORT = 127001
+REDIS_DB = 0
+CACHE_TTL = 10  # Cache time-to-live in seconds
+
+# Connect to Redis
+redis_store = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
+
+def get_page(url: str) -> Optional[str]:
     """
-    @wraps(method)
-    def wrapper(url: str) -> str:
-        """Wrapper function that implements the caching and counting logic.
-        
-        Args:
-            url (str): The URL to fetch.
-        
-        Returns:
-            str: The content of the URL.
-        """
-        # Increment the request count
-        r.incr(f"count:{url}")
-        print(f"Request count for {url}: {r.get(f'count:{url}').decode('utf-8')}")
+    Returns the content of a URL after caching the request's response,
+    and tracking the request.
 
-        # Check if the URL content is already cached
-        cached_html = r.get(f"cached:{url}")
-        if cached_html:
-            print(f"Cache hit for {url}")
-            return cached_html.decode('utf-8')
-        
-        # Fetch the content and cache it
-        html = method(url)
-        r.setex(f"cached:{url}", 10, html)
-        print(f"Fetched and cached new content for {url}")
-        return html
-
-    return wrapper
-
-@count_requests
-def get_page(url: str) -> str:
-    """Fetches the HTML content of a URL.
-    
     Args:
         url (str): The URL to fetch.
-    
+
     Returns:
-        str: The HTML content of the URL.
+        Optional[str]: The content of the URL or None if an error occurs.
     """
-    req = requests.get(url)
-    return req.text
+    if not url:
+        logger.warning("Invalid URL provided.")
+        return None
+
+    res_key = f'result:{url}'
+    req_key = f'count:{url}'
+
+    try:
+        # Check cache
+        result = redis_store.get(res_key)
+        if result is not None:
+            redis_store.incr(req_key)
+            logger.info(f"Cache hit for URL: {url}")
+            return result.decode('utf-8')
+
+        # Make HTTP request
+        response = requests.get(url)
+        response.raise_for_status()
+        result = response.content.decode('utf-8')
+
+        # Cache the result
+        redis_store.setex(res_key, timedelta(seconds=CACHE_TTL), result)
+        redis_store.incr(req_key)
+        logger.info(f"Cache miss for URL: {url}. Content fetched and cached.")
+        return result
+    except requests.RequestException as e:
+        logger.error(f"Error fetching URL: {url} - {e}")
+        return None
+    except redis.RedisError as e:
+        logger.error(f"Error interacting with Redis: {e}")
+        return None
 
 if __name__ == "__main__":
     # Example usage
-    url = "http://google.com"
+    url = "http://example.com"
     content = get_page(url)
-    print(content)
+    if content:
+        print(content)
+    else:
+        print("Failed to retrieve the content.")
