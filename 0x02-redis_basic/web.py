@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 REDIS_HOST = 'localhost'
 REDIS_PORT = 127001
 REDIS_DB = 0
-CACHE_TTL = 10  # Cache time-to-live in seconds
+CACHE_TTL = 10
 
 # Connect to Redis
 redis_store = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
