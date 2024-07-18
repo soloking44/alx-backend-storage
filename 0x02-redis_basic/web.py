@@ -10,17 +10,14 @@ from typing import Callable
 from datetime import timedelta
 import logging
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Redis connection configuration
 REDIS_HOST = 'localhost'
 REDIS_PORT = 127001
 REDIS_DB = 0
 CACHE_TTL = 10
 
-# Connect to Redis
 redis_store = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
 
 r = redis.Redis()
