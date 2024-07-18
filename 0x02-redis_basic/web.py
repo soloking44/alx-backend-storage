@@ -32,15 +32,18 @@ def count_requests(method: Callable[[str], str]) -> Callable[[str], str]:
         """
         # Increment the request count
         r.incr(f"count:{url}")
-        
+        print(f"Request count for {url}: {r.get(f'count:{url}').decode('utf-8')}")
+
         # Check if the URL content is already cached
         cached_html = r.get(f"cached:{url}")
         if cached_html:
+            print(f"Cache hit for {url}")
             return cached_html.decode('utf-8')
         
         # Fetch the content and cache it
         html = method(url)
         r.setex(f"cached:{url}", 10, html)
+        print(f"Fetched and cached new content for {url}")
         return html
 
     return wrapper
