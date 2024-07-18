@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 # Redis connection configuration
 REDIS_HOST = 'localhost'
-REDIS_PORT = 6379
+REDIS_PORT = 127001
 REDIS_DB = 0
 CACHE_TTL = 10  # Cache time-to-live in seconds
 
