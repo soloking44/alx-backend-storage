@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 # Redis connection configuration
 REDIS_HOST = 'localhost'
-REDIS_PORT = 6379  # Corrected port number
+REDIS_PORT = 127001
 REDIS_DB = 0
 CACHE_TTL = 10  # Cache time-to-live in seconds
 
@@ -31,10 +31,6 @@ def count_requests(method: Callable) -> Callable:
     def wrapper(url: str) -> str:
         """Wrapper function to manage caching and request counting."""
         try:
-            # Initialize the request count if it doesn't exist
-            if not r.exists(f"count:{url}"):
-                r.set(f"count:{url}", 0)
-
             # Increment the request count for the URL
             r.incr(f"count:{url}")
 
@@ -45,9 +41,7 @@ def count_requests(method: Callable) -> Callable:
 
             # Fetch the URL content and cache it
             html = method(url)
-            response = r.setex(f"cached:{url}", CACHE_TTL, html)
-            if not response:
-                logger.error("Failed to set cache")
+            r.setex(f"cached:{url}", CACHE_TTL, html)
             return html
         except redis.RedisError as e:
             logger.error(f"Redis error: {e}")
