@@ -1,66 +1,77 @@
 #!/usr/bin/env python3
-'''A module with tools for request caching and tracking.
-'''
+"""
+This script implements a cache and tracker function using Redis.
+"""
+
+from functools import wraps
 import redis
 import requests
-from datetime import timedelta
-import logging
+from typing import Callable
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Initialize the Redis client
+r = redis.Redis()
 
-# Redis connection configuration
-REDIS_HOST = 'localhost'
-REDIS_PORT = 127001
-REDIS_DB = 0
-CACHE_TTL = 10  # Cache time-to-live in seconds
+def count_requests(method: Callable) -> Callable:
+    """Decorator to track the number of times a URL is accessed and cache the result."""
+    @wraps(method)
+    def wrapper(url: str) -> str:
+        """Wrapper function to manage caching and request counting."""
+        try:
+            # Initialize the request count if it doesn't exist
+            if not r.exists(f"count:{url}"):
+                r.set(f"count:{url}", 0)
 
-# Connect to Redis
-redis_store = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
-
-def get_page(url: str) -> str:
-    '''Returns the content of a URL after caching the request's response,
-    and tracking the request.
-    '''
-    if url is None or len(url.strip()) == 0:
-        logger.warning("Invalid URL provided.")
-        return ''
-
-    res_key = f'result:{url}'
-    req_key = f'count:{url}'
-    
-    try:
-        # Check cache
-        result = redis_store.get(res_key)
-        if result is not None:
-            redis_store.incr(req_key)
-            logger.info(f"Cache hit for URL: {url}")
-            return result.decode('utf-8')
-
-        # Make HTTP request
-        response = requests.get(url)
-        response.raise_for_status()
-        result = response.content.decode('utf-8')
-
-        # Cache the result
-        setex_response = redis_store.setex(res_key, timedelta(seconds=CACHE_TTL), result)
-        if setex_response:
-            redis_store.set(req_key, 1)
-        else:
-            logger.error(f"Failed to set cache for URL: {url}")
+            # Increment the request count for the URL
+            r.incr(f"count:{url}")
+            
+            # Check if the URL content is already cached
+            cached_html = r.get(f"cached:{url}")
+            if cached_html:
+                return cached_html.decode('utf-8')
+            
+            # Fetch the URL content and cache it
+            html = method(url)
+            response = r.setex(f"cached:{url}", 10, html)
+            if not response:
+                print("Failed to set cache")
+            return html
+        except redis.RedisError as e:
+            print(f"Redis error: {e}")
+            return method(url)
+        except requests.RequestException as e:
+            print(f"Request error: {e}")
+            return ""
         
-        logger.info(f"Cache miss for URL: {url}. Content fetched and cached.")
-        return result
-    except requests.RequestException as e:
-        logger.error(f"Error fetching URL: {url} - {e}")
-        return ''
-    except redis.RedisError as e:
-        logger.error(f"Error interacting with Redis: {e}")
-        return ''
+    return wrapper
+
+@count_requests
+def get_page(url: str) -> str:
+    """
+    Fetch the HTML content of a given URL using requests.
+    """
+    req = requests.get(url)
+    return req.text
 
 if __name__ == "__main__":
-    # Example usage
-    url = "http://google.com"
-    content = get_page(url)
-    print(content)
+    test_url = "http://slowwly.robertomurray.co.uk/delay/5000/url/http://www.example.com"
+    
+    # Clear previous counts and cache for testing
+    r.delete(f"count:{test_url}")
+    r.delete(f"cached:{test_url}")
+
+    # First call, should fetch and cache
+    print("First call (should fetch):")
+    print(get_page(test_url))
+    print(f"Count: {r.get(f'count:{test_url}').decode('utf-8')}")  # Should be 1
+
+    # Subsequent call within 10 seconds, should use cache
+    print("\nSecond call (should use cache):")
+    print(get_page(test_url))
+    print(f"Count: {r.get(f'count:{test_url}').decode('utf-8')}")  # Should be 2
+
+    # Wait for cache to expire and call again
+    import time
+    time.sleep(10)
+    print("\nThird call after cache expiration (should fetch again):")
+    print(get_page(test_url))
+    print(f"Count: {r.get(f'count:{test_url}').decode('utf-8')}")  # Should be 3
