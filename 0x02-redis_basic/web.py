@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
-"""
-A module with tools for request caching and tracking.
-"""
-
+'''A module with tools for request caching and tracking.
+'''
 import redis
 import requests
 from datetime import timedelta
 import logging
-from typing import Optional
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -22,24 +19,17 @@ CACHE_TTL = 10  # Cache time-to-live in seconds
 # Connect to Redis
 redis_store = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
 
-def get_page(url: str) -> Optional[str]:
-    """
-    Returns the content of a URL after caching the request's response,
+def get_page(url: str) -> str:
+    '''Returns the content of a URL after caching the request's response,
     and tracking the request.
-
-    Args:
-        url (str): The URL to fetch.
-
-    Returns:
-        Optional[str]: The content of the URL or None if an error occurs.
-    """
-    if not url:
+    '''
+    if url is None or len(url.strip()) == 0:
         logger.warning("Invalid URL provided.")
-        return None
+        return ''
 
     res_key = f'result:{url}'
     req_key = f'count:{url}'
-
+    
     try:
         # Check cache
         result = redis_store.get(res_key)
@@ -54,22 +44,23 @@ def get_page(url: str) -> Optional[str]:
         result = response.content.decode('utf-8')
 
         # Cache the result
-        redis_store.setex(res_key, timedelta(seconds=CACHE_TTL), result)
-        redis_store.incr(req_key)
+        setex_response = redis_store.setex(res_key, timedelta(seconds=CACHE_TTL), result)
+        if setex_response:
+            redis_store.set(req_key, 1)
+        else:
+            logger.error(f"Failed to set cache for URL: {url}")
+        
         logger.info(f"Cache miss for URL: {url}. Content fetched and cached.")
         return result
     except requests.RequestException as e:
         logger.error(f"Error fetching URL: {url} - {e}")
-        return None
+        return ''
     except redis.RedisError as e:
         logger.error(f"Error interacting with Redis: {e}")
-        return None
+        return ''
 
 if __name__ == "__main__":
     # Example usage
-    url = "http://example.com"
+    url = "http://google.com"
     content = get_page(url)
-    if content:
-        print(content)
-    else:
-        print("Failed to retrieve the content.")
+    print(content)
