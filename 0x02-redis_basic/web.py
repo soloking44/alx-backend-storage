@@ -24,7 +24,7 @@ def count_requests(method: Callable) -> Callable:
             return cached_html.decode('utf-8')
 
         html = method(url)
-        r.setex(f"cached:{url}", 10, html)
+        r.setex(f"cached:{url}", 10, html.encode('utf-8'))  # encode html to bytes
         return html
 
     return wrapper
