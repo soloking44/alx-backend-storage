@@ -1,38 +1,37 @@
 #!/usr/bin/env python3
-'''this is the tools for request caching and tracking.
-'''
+""" Redis Module """
+
+from functools import wraps
 import redis
 import requests
-from functools import wraps
 from typing import Callable
 
-
-redis_store = redis.Redis()
-'''This is the Redis instance.
-'''
+redis_ = redis.Redis(host='localhost', port=6379, db=0)
 
 
-def data_cacher(method: Callable) -> Callable:
-    '''this is the output of fetched data.
-    '''
+def count_requests(method: Callable) -> Callable:
+    """ Decorator for counting """
     @wraps(method)
-    def invoker(url) -> str:
-        '''The wrapper function for caching the output.
-        '''
-        redis_store.incr(f'count:{url}')
-        result = redis_store.get(f'result:{url}')
-        if result:
-            return result.decode('utf-8')
-        result = method(url)
-        redis_store.set(f'count:{url}', 0)
-        redis_store.setex(f'result:{url}', 10, result)
-        return result
-    return invoker
+    def wrapper(url):  # sourcery skip: use-named-expression
+        """ Wrapper for decorator """
+        redis_.incr(f"count:{url}")
+        cached_html = redis_.get(f"cached:{url}")
+        if cached_html:
+            return cached_html.decode('utf-8')
+        try:
+            html = method(url)
+            redis_.setex(f"cached:{url}", 10, html.encode('utf-8'))
+            return html
+        except requests.RequestException as e:
+            print(f"Error fetching URL {url}: {e}")
+            return None
+
+    return wrapper
 
 
-@data_cacher
+@count_requests
 def get_page(url: str) -> str:
-    '''Returns the content of a URL after caching the request's response,
-    and tracking the request.
-    '''
-    return requests.get(url).text
+    """ Obtain the HTML content of a  URL """
+    req = requests.get(url)
+    req.raise_for_status()  # Raise an exception for bad status codes
+    return req.text
