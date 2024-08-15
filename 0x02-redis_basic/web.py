@@ -15,19 +15,19 @@ def count_requests(method: Callable) -> Callable:
     """ shows number of time request count
     is accessed """
 
-    @wraps(method)
-    def wrapper(url):
-        """ a wrapper decorator process """
-        r.incr(f"count:{url}")
-        cached_html = r.get(f"cached:{url}")
-        if cached_html:
-            return cached_html.decode('utf-8')
+@wraps(method)
+def wrapper(url):
+    """ a wrapper decorator process """
+    r.incr(f"count:{url}")
+    cached_html = r.get(f"cached:{url}")
+    if cached_html:
+        return cached_html.decode('utf-8')
 
-        html = method(url)
-        r.setex(f"cached:{url}", 10, html.encode('utf-8'))  # encode html to bytes
-        return html
+    html = method(url)
+    r.setex(f"cached:{url}", 10, html)
+    return html
 
-    return wrapper
+return wrapper
 
 
 @count_requests
