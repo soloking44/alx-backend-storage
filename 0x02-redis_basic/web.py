@@ -17,21 +17,23 @@ def count_requests(method: Callable) -> Callable:
         redis_.incr(f"count:{url}")
         cached_html = redis_.get(f"cached:{url}")
         if cached_html:
-            return "OK"
+            return cached_html.decode('utf-8')
         try:
             html = method(url)
             redis_.setex(f"cached:{url}", 10, html.encode('utf-8'))
-            return "OK"
+            return html
         except requests.RequestException as e:
             print(f"Error fetching URL {url}: {e}")
-            return "Error"
+            return None
 
     return wrapper
 
 
-@count_requests
-def get_page(url: str) -> str:
-    """ Obtain the HTML content of a  URL """
+def get_page_without_cache(url: str) -> str:
+    """ Obtain the HTML content of a  URL without caching """
     req = requests.get(url)
     req.raise_for_status()  # Raise an exception for bad status codes
     return req.text
+
+
+get_page = count_requests(get_page_without_cache)
