@@ -12,19 +12,19 @@ redis_ = redis.Redis(host='localhost', port=6379, db=0)
 def count_requests(method: Callable) -> Callable:
     """ Decorator for counting """
     @wraps(method)
-    def wrapper(url):  # sourcery skip: use-named-expression
+    def wrapper(url):  
         """ Wrapper for decorator """
         redis_.incr(f"count:{url}")
         cached_html = redis_.get(f"cached:{url}")
         if cached_html:
-            return cached_html.decode('utf-8')
+            return "OK"
         try:
             html = method(url)
             redis_.setex(f"cached:{url}", 10, html.encode('utf-8'))
-            return html
+            return "OK"
         except requests.RequestException as e:
             print(f"Error fetching URL {url}: {e}")
-            return None
+            return "Error"
 
     return wrapper
 
